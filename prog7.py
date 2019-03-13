@@ -192,7 +192,6 @@ with tf.Session(graph = graph) as session:
 		print("------------------------------- EPOCH {:02d} -------------------------------".format(epoch))
 		# shuffle the dataset for training each epoch
 		# train_dataset, train_label = randomize(train_dataset, train_label)
-		avg_accu = 0
 		epoch_time = 0
 
 		for step in range(total_step):
@@ -209,7 +208,7 @@ with tf.Session(graph = graph) as session:
 
 			# error rate
 			train_accuracy = accuracy(pred, label)
-			if step % 100 == 0:
+			if step % 200 == 0:
 				summary = "batch {:04d}: loss is {:06.2f}, accuracy on training set {:02.2f} %".format(step, cost, train_accuracy)
 				print(summary)
 
