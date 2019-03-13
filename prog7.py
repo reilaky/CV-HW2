@@ -1,13 +1,29 @@
-# dataset: CIFAR10
-# 10 classes: (airplane, auto, bird, cat, deer, dog, frog, horse, ship, truck)
 import os
-import tensorflow as tf
-import data_process as dp
 import numpy as np
+import pickle
+import random
+import tensorflow as tf
+import time
 
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 
-# implement a five layer CNN
+'''
+(1) process images (input, batch, format conversion, etc.)
+(2) perform training (with proper batching)
+(3) estimate performance (i.e., error rate and run time of each epoch)
+(4) output (save) the final network parameters
+'''
+
+# dataset: CIFAR10
+# 10 classes: (airplane, auto, bird, cat, deer, dog, frog, horse, ship, truck)
+TRAIN_DATASETS = ['data_batch_1', 'data_batch_2', 'data_batch_3', 'data_batch_4', 'data_batch_5' ]
+TEST_DATASET = 'test_batch'
+FOLDER_NAME = 'cifar-10-batches-py/'
+IMAGE_WIDTH = 32
+IMAGE_HEIGHT = 32
+IMAGE_DEPTH = 3
+
+# CNN:
 '''
 layer 1: CNN(relu, max pooling)
 layer 2: CNN(relu, max pooling)
@@ -16,22 +32,71 @@ layer 32: CNN(relu, max pooling)
 layer 4: FNN
 layer 5: output layer
 '''
-IMAGE_WIDTH = 32
-IMAGE_HEIGHT = 32
 LABELS = 10
-IMAGE_DEPTH = 3
+BATCH_SIZE = 64
+EPOCH = 1
+FILTER_SIZE_1 = 7
+FILTER_SIZE_2 = 3
+FILTER_SIZE_31 = 3
+FILTER_SIZE_32 = 3
+FILTER_DEPTH_1 = 64
+FILTER_DEPTH_2 = 128
+FILTER_DEPTH_31 = 256
+FILTER_DEPTH_32 = 256
+HIDDEN_CELLS = 4096
+LR = 0.0025
+# STEPS = 10001
+# learning_rates = [0.001, 0.0015, 0.002, 0.0025]
 
-BATCH_SIZE = 32
-FILTER_SIZE = 5
-FILTER_DEPTH_1 = 6
-FILTER_DEPTH_2 = 16
-HIDDEN_CELLS_1 = 120
-HIDDEN_CELLS_2 = 84
 
-STEPS = 10001
-learning_rates = [0.001, 0.0015, 0.002, 0.0025]
+def get_label_name(label):
+	"""
+	Load the label names from file
+	"""
+	index = np.argmax(label)
+	labels = ['airplane', 'automobile', 'bird', 'cat', 'deer', 'dog', 'frog', 'horse', 'ship', 'truck']
+	return labels[int(index)]
 
-train_dataset, train_label, test_dataset, test_label = dp.data_process() 
+def one_hot_encode(np_array, num_label):
+	temp = (np.arange(num_label) == np_array[:,None]).astype(np.float32)
+	return temp
+
+def reformat_data(dataset, label):
+	np_dataset = dataset.reshape((len(dataset), IMAGE_DEPTH, IMAGE_WIDTH, IMAGE_HEIGHT)).transpose(0, 2, 3, 1)
+	num_label = len(np.unique(label))
+	np_label = one_hot_encode(np.array(label, dtype=np.float32), num_label)
+	#np_dataset, np_label = randomize(np_dataset_, np_label_)
+	return np_dataset, np_label
+
+def randomize(dataset, label):
+	permutation = np.random.permutation(label.shape[0])
+	shuffled_dataset = dataset[permutation, :, :]
+	shuffled_label = label[permutation]
+	return shuffled_dataset, shuffled_label
+
+def data_process():
+	current_path = os.path.dirname(os.path.abspath(__file__))
+	file_path = current_path + '/' + FOLDER_NAME
+	# load train and test dictionary
+	train_dataset, train_label = [], []
+	for dataset in TRAIN_DATASETS:
+		with open(file_path + dataset, 'rb') as f0:
+			train_dict = pickle.load(f0, encoding = 'bytes')
+			train_dataset_temp, train_label_temp = train_dict[b'data'], train_dict[b'labels']
+			train_dataset.append(train_dataset_temp)
+			train_label += train_label_temp
+
+	with open(file_path + TEST_DATASET, 'rb') as f1:
+		test_dict = pickle.load(f1, encoding = 'bytes')
+		test_dataset, test_label = test_dict[b'data'], test_dict[b'labels']
+
+	train_dataset = np.concatenate(train_dataset, axis = 0)
+	train_dataset, train_label = reformat_data(train_dataset, train_label)
+	test_dataset, test_label = reformat_data(test_dataset, test_label)
+	print("training dataset contains {} images, each of size {}".format(train_dataset[:,:,:,:].shape[0], train_dataset[:,:,:,:].shape[1:]))
+	print("test dataset contains {} images, each of size {}".format(test_dataset[:,:,:,:].shape[0], test_dataset[:,:,:,:].shape[1:]))
+	return train_dataset, train_label, test_dataset, test_label
+
 
 def flatten_tf_array(array):
     shape = array.get_shape().as_list()
@@ -40,97 +105,121 @@ def flatten_tf_array(array):
 def accuracy(pred, label):
 	return (100.0 * np.sum(np.argmax(pred, 1) == np.argmax(label, 1)) / pred.shape[0])
 
-def init_variables(filter_size = FILTER_SIZE, filter_depth1 = FILTER_DEPTH_1, 
-					filter_depth2 = FILTER_DEPTH_2, 
-					num_hidden1 = HIDDEN_CELLS_1, num_hidden2 = HIDDEN_CELLS_2,
-					image_width = IMAGE_WIDTH, image_height = IMAGE_HEIGHT, image_depth = IMAGE_DEPTH, num_labels = LABELS):
+def init_variables(filter_size1 = FILTER_SIZE_1, filter_depth1 = FILTER_DEPTH_1, 
+				   filter_size2 = FILTER_SIZE_2, filter_depth2 = FILTER_DEPTH_2,
+				   filter_size31 = FILTER_SIZE_31, filter_depth31 = FILTER_DEPTH_31, 
+				   filter_size32 = FILTER_SIZE_32, filter_depth32 = FILTER_DEPTH_32,
+				   num_hidden = HIDDEN_CELLS,
+				   image_width = IMAGE_WIDTH, image_height = IMAGE_HEIGHT, image_depth = IMAGE_DEPTH, num_labels = LABELS):
 
-	w1 = tf.Variable(tf.truncated_normal([filter_size, filter_size, image_depth, filter_depth1], stddev=0.1))
+	# random xavier	
+	w1 = tf.Variable(tf.truncated_normal([filter_size1, filter_size1, image_depth, filter_depth1], stddev=0.1))
 	b1 = tf.Variable(tf.zeros([filter_depth1]))
 
-	w2 = tf.Variable(tf.truncated_normal([filter_size, filter_size, filter_depth1, filter_depth2], stddev=0.1))
+	w2 = tf.Variable(tf.truncated_normal([filter_size2, filter_size2, filter_depth1, filter_depth2], stddev=0.1))
 	b2 = tf.Variable(tf.constant(1.0, shape=[filter_depth2]))
 
-	w3 = tf.Variable(tf.truncated_normal([(image_width // filter_size)*(image_height // filter_size)*filter_depth2, num_hidden1], stddev=0.1))
-	b3 = tf.Variable(tf.constant(1.0, shape = [num_hidden1]))
+	w31 = tf.Variable(tf.truncated_normal([filter_size31, filter_size31, filter_depth2, filter_depth31], stddev=0.1))
+	b31 = tf.Variable(tf.constant(1.0, shape = [filter_depth31]))
 
-	w4 = tf.Variable(tf.truncated_normal([num_hidden1, num_hidden2], stddev=0.1))
-	b4 = tf.Variable(tf.constant(1.0, shape = [num_hidden2]))
+	w32 = tf.Variable(tf.truncated_normal([filter_size32, filter_size32, filter_depth31, filter_depth32], stddev=0.1))
+	b32 = tf.Variable(tf.constant(1.0, shape = [filter_depth32]))
 
-	w5 = tf.Variable(tf.truncated_normal([num_hidden2, num_labels], stddev=0.1))
-	b5 = tf.Variable(tf.constant(1.0, shape = [num_labels]))
+	w4 = tf.Variable(tf.truncated_normal([num_hidden, num_labels], stddev=0.1))
+	b4 = tf.Variable(tf.constant(1.0, shape = [num_labels]))
+
 	variables = {
-		'w1': w1, 'w2': w2, 'w3': w3, 'w4': w4, 'w5': w5,
-		'b1': b1, 'b2': b2, 'b3': b3, 'b4': b4, 'b5': b5
+		'w1': w1, 'w2': w2, 'w31': w31, 'w32': w32, 'w4': w4, 
+		'b1': b1, 'b2': b2, 'b31': b31, 'b32': b32, 'b4': b4
 	}
 	return variables
 
-def model_lenet5(data, variables):
+def model_cnn(data, variables):
+
 	layer1_conv = tf.nn.conv2d(data, variables['w1'], [1, 1, 1, 1], padding='SAME')
-	layer1_actv = tf.sigmoid(layer1_conv + variables['b1'])
-	layer1_pool = tf.nn.avg_pool(layer1_actv, [1, 2, 2, 1], [1, 2, 2, 1], padding='SAME')
+	layer1_actv = tf.nn.relu(layer1_conv + variables['b1'])
+	layer1_pool = tf.nn.max_pool(layer1_actv, [1, 2, 2, 1], [1, 2, 2, 1], padding='SAME')
 
-	layer2_conv = tf.nn.conv2d(layer1_pool, variables['w2'], [1, 1, 1, 1], padding='VALID')
-	layer2_actv = tf.sigmoid(layer2_conv + variables['b2'])
-	layer2_pool = tf.nn.avg_pool(layer2_actv, [1, 2, 2, 1], [1, 2, 2, 1], padding='SAME')
+	layer2_conv = tf.nn.conv2d(layer1_pool, variables['w2'], [1, 1, 1, 1], padding='SAME')
+	layer2_actv = tf.nn.relu(layer2_conv + variables['b2'])
+	layer2_pool = tf.nn.max_pool(layer2_actv, [1, 2, 2, 1], [1, 2, 2, 1], padding='SAME')
 
-	# layer3_conv = tf.nn.conv2d(layer1_pool, variables['w2'], [1, 1, 1, 1], padding='VALID')
-	# layer3_actv = tf.sigmoid(layer2_conv + variables['b2'])
-	# layer_pool = tf.nn.avg_pool(layer2_actv, [1, 2, 2, 1], [1, 2, 2, 1], padding='SAME')
+	layer31_conv = tf.nn.conv2d(layer2_pool, variables['w31'], [1, 1, 1, 1], padding='SAME')
+	layer31_actv = tf.nn.relu(layer31_conv + variables['b31'])
 
-	flat_layer = flatten_tf_array(layer2_pool)
-	layer3_fccd = tf.matmul(flat_layer, variables['w3']) + variables['b3']
-	layer3_actv = tf.nn.sigmoid(layer3_fccd)
+	layer32_conv = tf.nn.conv2d(layer31_actv, variables['w32'], [1, 1, 1, 1], padding='SAME')
+	layer32_actv = tf.nn.relu(layer32_conv + variables['b32'])
+	layer32_pool = tf.nn.max_pool(layer32_actv, [1, 2, 2, 1], [1, 2, 2, 1], padding='SAME')
 
-	layer4_fccd = tf.matmul(layer3_actv, variables['w4']) + variables['b4']
-	layer4_actv = tf.nn.sigmoid(layer4_fccd)
+	flat_layer = flatten_tf_array(layer32_pool)
+	layer4_fccd = tf.matmul(flat_layer, variables['w4']) + variables['b4']
 	
-	logits = tf.matmul(layer4_actv, variables['w5']) + variables['b5']
-	return logits
+	return layer4_fccd
 
+train_dataset, train_label, test_dataset, test_label = data_process()
+print('learning_rate:', LR)
+graph = tf.Graph()
 
-for LR in learning_rates:
-	print('learning_rate:', LR)
-	graph = tf.Graph()
-	with graph.as_default():
-		tf_train_dataset = tf.placeholder(tf.float32, shape = (BATCH_SIZE, IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_DEPTH))
-		tf_train_label = tf.placeholder(tf.float32, shape = (BATCH_SIZE, LABELS))
-		tf_test_dataset = tf.constant(test_dataset, tf.float32)
+with graph.as_default():
+	tf_train_dataset = tf.placeholder(tf.float32, shape = (BATCH_SIZE, IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_DEPTH), name='input')
+	tf_train_label = tf.placeholder(tf.float32, shape = (BATCH_SIZE, LABELS))
+	tf_test_dataset = tf.constant(test_dataset, tf.float32)
 
-		# initilization of weight and bias
-		variables_ = init_variables
-		variables = variables_(image_width = IMAGE_WIDTH, image_height = IMAGE_HEIGHT, image_depth = IMAGE_DEPTH, num_labels = LABELS)
+	# initilization of weight and bias
+	variables_ = init_variables
+	variables = variables_(image_width = IMAGE_WIDTH, image_height = IMAGE_HEIGHT, image_depth = IMAGE_DEPTH, num_labels = LABELS)
 
-		# initialize model
-		model = model_lenet5
-		logits = model(tf_train_dataset, variables)
+	# initialize model
+	model = model_cnn
+	logits = model(tf_train_dataset, variables)
 
-		# loss
-		loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=tf_train_label))
+	# loss
+	loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=tf_train_label))
 
-		# optimizer
-		optimizer = tf.train.AdamOptimizer(learning_rate = LR).minimize(loss)
+	# optimizer
+	optimizer = tf.train.AdamOptimizer(learning_rate = LR).minimize(loss)
 
-		# prediction for training and test data
-		train_pred = tf.nn.softmax(logits)
+	# prediction for training set
+	train_pred = tf.nn.softmax(logits)
 
-		logits_test = model_lenet5(tf_test_dataset, variables)
-		test_pred = tf.nn.softmax(logits_test)
+with tf.Session(graph = graph) as session:
 
-	with tf.Session(graph = graph) as session:
-		tf.global_variables_initializer().run()
-		for step in range(STEPS):
+	tf.global_variables_initializer().run()
+	saver = tf.train.Saver()
+
+	total_step = train_label.shape[0] // BATCH_SIZE
+	for epoch in range(EPOCH):
+		print("------------------------------- EPOCH {:02d} -------------------------------".format(epoch))
+		# shuffle the dataset for training each epoch
+		# train_dataset, train_label = randomize(train_dataset, train_label)
+		avg_accu = 0
+		epoch_time = 0
+
+		for step in range(total_step):
 			offset = (step * BATCH_SIZE) % (train_label.shape[0] - BATCH_SIZE)
 			data = train_dataset[offset:(offset + BATCH_SIZE), :, :, :]
 			label = train_label[offset:(offset + BATCH_SIZE), :]
-
 			feed_dict = {tf_train_dataset: data, tf_train_label:label}
-			_, cost, pred = session.run([optimizer, loss, train_pred], feed_dict = feed_dict)
-			train_accuracy = accuracy(pred, label)
 
-			if step % 1000 == 0:
-				test_accuracy = accuracy(test_pred.eval(), test_label)
-				summary = "step {:04d} : loss is {:06.2f}, accuracy on training set {:02.2f} %, accuracy on test set {:02.2f} %".format(step, cost, train_accuracy, test_accuracy)
+			# run time
+			start_time = time.time()
+			_, cost, pred = session.run([optimizer, loss, train_pred], feed_dict = feed_dict)
+			runtime = time.time() - start_time
+			epoch_time += runtime
+
+			# error rate
+			train_accuracy = accuracy(pred, label)
+			if step % 100 == 0:
+				summary = "batch {:04d}: loss is {:06.2f}, accuracy on training set {:02.2f} %".format(step, cost, train_accuracy)
 				print(summary)
+
+		epoch_summary = "EPOCH {:02d}: run time {:.2f}min, accuracy on training set {:02.2f}%, error rate {:02.2f}%".format(epoch, epoch_time / 60.0, train_accuracy, 100 - train_accuracy)
+		print(epoch_summary)
+
+	save_model = saver.save(session, os.path.dirname(os.path.abspath(__file__)) + "/tmp/model.ckpt")
+	print("Model saved in path: %s" % save_model)
+
+
+
 
 
