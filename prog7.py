@@ -17,7 +17,6 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 # dataset: CIFAR10
 # 10 classes: (airplane, auto, bird, cat, deer, dog, frog, horse, ship, truck)
 TRAIN_DATASETS = ['data_batch_1', 'data_batch_2', 'data_batch_3', 'data_batch_4', 'data_batch_5' ]
-TEST_DATASET = 'test_batch'
 FOLDER_NAME = 'cifar-10-batches-py/'
 IMAGE_WIDTH = 32
 IMAGE_HEIGHT = 32
@@ -34,7 +33,7 @@ layer 5: output layer
 '''
 LABELS = 10
 BATCH_SIZE = 64
-EPOCH = 1
+EPOCH = 10
 FILTER_SIZE_1 = 7
 FILTER_SIZE_2 = 3
 FILTER_SIZE_31 = 3
@@ -62,10 +61,10 @@ def one_hot_encode(np_array, num_label):
 	return temp
 
 def reformat_data(dataset, label):
-	np_dataset = dataset.reshape((len(dataset), IMAGE_DEPTH, IMAGE_WIDTH, IMAGE_HEIGHT)).transpose(0, 2, 3, 1)
+	np_dataset_ = dataset.reshape((len(dataset), IMAGE_DEPTH, IMAGE_WIDTH, IMAGE_HEIGHT)).transpose(0, 2, 3, 1)
 	num_label = len(np.unique(label))
-	np_label = one_hot_encode(np.array(label, dtype=np.float32), num_label)
-	#np_dataset, np_label = randomize(np_dataset_, np_label_)
+	np_label_ = one_hot_encode(np.array(label, dtype=np.float32), num_label)
+	np_dataset, np_label = randomize(np_dataset_, np_label_)
 	return np_dataset, np_label
 
 def randomize(dataset, label):
@@ -92,10 +91,8 @@ def data_process():
 
 	train_dataset = np.concatenate(train_dataset, axis = 0)
 	train_dataset, train_label = reformat_data(train_dataset, train_label)
-	test_dataset, test_label = reformat_data(test_dataset, test_label)
 	print("training dataset contains {} images, each of size {}".format(train_dataset[:,:,:,:].shape[0], train_dataset[:,:,:,:].shape[1:]))
-	print("test dataset contains {} images, each of size {}".format(test_dataset[:,:,:,:].shape[0], test_dataset[:,:,:,:].shape[1:]))
-	return train_dataset, train_label, test_dataset, test_label
+	return train_dataset, train_label
 
 
 def flatten_tf_array(array):
@@ -156,14 +153,13 @@ def model_cnn(data, variables):
 	
 	return layer4_fccd
 
-train_dataset, train_label, test_dataset, test_label = data_process()
+train_dataset, train_label= data_process()
 print('learning_rate:', LR)
 graph = tf.Graph()
 
 with graph.as_default():
 	tf_train_dataset = tf.placeholder(tf.float32, shape = (BATCH_SIZE, IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_DEPTH), name='input')
 	tf_train_label = tf.placeholder(tf.float32, shape = (BATCH_SIZE, LABELS))
-	tf_test_dataset = tf.constant(test_dataset, tf.float32)
 
 	# initilization of weight and bias
 	variables_ = init_variables
