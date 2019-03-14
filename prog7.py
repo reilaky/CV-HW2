@@ -105,21 +105,22 @@ def init_variables(filter_size1 = FILTER_SIZE_1, filter_depth1 = FILTER_DEPTH_1,
 				   num_hidden = HIDDEN_CELLS,
 				   image_width = IMAGE_WIDTH, image_height = IMAGE_HEIGHT, image_depth = IMAGE_DEPTH, num_labels = LABELS):
 
-	# random xavier	
-	w1 = tf.Variable(tf.truncated_normal([filter_size1, filter_size1, image_depth, filter_depth1], stddev=0.1))
-	b1 = tf.Variable(tf.zeros([filter_depth1]))
+	initializer = tf.contrib.layers.xavier_initializer()
 
-	w2 = tf.Variable(tf.truncated_normal([filter_size2, filter_size2, filter_depth1, filter_depth2], stddev=0.1))
-	b2 = tf.Variable(tf.constant(1.0, shape=[filter_depth2]))
+	w1 = tf.Variable(initializer([filter_size1, filter_size1, image_depth, filter_depth1]))
+	b1 = tf.Variable(initializer([filter_depth1]))
 
-	w31 = tf.Variable(tf.truncated_normal([filter_size31, filter_size31, filter_depth2, filter_depth31], stddev=0.1))
-	b31 = tf.Variable(tf.constant(1.0, shape = [filter_depth31]))
+	w2 = tf.Variable(initializer([filter_size2, filter_size2, filter_depth1, filter_depth2]))
+	b2 = tf.Variable(initializer([filter_depth2]))
 
-	w32 = tf.Variable(tf.truncated_normal([filter_size32, filter_size32, filter_depth31, filter_depth32], stddev=0.1))
-	b32 = tf.Variable(tf.constant(1.0, shape = [filter_depth32]))
+	w31 = tf.Variable(initializer([filter_size31, filter_size31, filter_depth2, filter_depth31]))
+	b31 = tf.Variable(initializer([filter_depth31]))
 
-	w4 = tf.Variable(tf.truncated_normal([num_hidden, num_labels], stddev=0.1))
-	b4 = tf.Variable(tf.constant(1.0, shape = [num_labels]))
+	w32 = tf.Variable(initializer([filter_size32, filter_size32, filter_depth31, filter_depth32]))
+	b32 = tf.Variable(initializer([filter_depth32]))
+
+	w4 = tf.Variable(initializer([num_hidden, num_labels]))
+	b4 = tf.Variable(initializer([num_labels]))
 
 	variables = {
 		'w1': w1, 'w2': w2, 'w31': w31, 'w32': w32, 'w4': w4, 
@@ -154,6 +155,7 @@ print('learning_rate:', LR)
 graph = tf.Graph()
 
 with graph.as_default():
+
 	tf_train_dataset = tf.placeholder(tf.float32, shape = (BATCH_SIZE, IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_DEPTH), name='input')
 	tf_train_label = tf.placeholder(tf.float32, shape = (BATCH_SIZE, LABELS))
 
