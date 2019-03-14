@@ -18,6 +18,8 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 # 10 classes: (airplane, auto, bird, cat, deer, dog, frog, horse, ship, truck)
 TRAIN_DATASETS = ['data_batch_1', 'data_batch_2', 'data_batch_3', 'data_batch_4', 'data_batch_5' ]
 FOLDER_NAME = 'cifar-10-batches-py/'
+SAVE_PATH = '/tmp/model.ckpt'
+CURRENT_PATH = os.path.dirname(os.path.abspath(__file__))
 IMAGE_WIDTH = 32
 IMAGE_HEIGHT = 32
 IMAGE_DEPTH = 3
@@ -93,7 +95,7 @@ def data_process():
 
 def flatten_tf_array(array):
     shape = array.get_shape().as_list()
-    return tf.reshape(array, [shape[0], shape[1] * shape[2] * shape[3]])
+    return tf.reshape(array, [-1, shape[1] * shape[2] * shape[3]])
 
 def accuracy(pred, label):
 	return (100.0 * np.sum(np.argmax(pred, 1) == np.argmax(label, 1)) / pred.shape[0])
@@ -107,7 +109,7 @@ def init_variables(filter_size1 = FILTER_SIZE_1, filter_depth1 = FILTER_DEPTH_1,
 
 	initializer = tf.contrib.layers.xavier_initializer()
 
-	w1 = tf.Variable(initializer([filter_size1, filter_size1, image_depth, filter_depth1]))
+	w1 = tf.Variable(initializer([filter_size1, filter_size1, image_depth, filter_depth1]), name='w1')
 	b1 = tf.Variable(initializer([filter_depth1]))
 
 	w2 = tf.Variable(initializer([filter_size2, filter_size2, filter_depth1, filter_depth2]))
@@ -155,8 +157,7 @@ print('learning_rate:', LR)
 graph = tf.Graph()
 
 with graph.as_default():
-
-	tf_train_dataset = tf.placeholder(tf.float32, shape = (BATCH_SIZE, IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_DEPTH), name='input')
+	tf_train_dataset = tf.placeholder(tf.float32, shape = (None, IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_DEPTH), name='input_x')
 	tf_train_label = tf.placeholder(tf.float32, shape = (BATCH_SIZE, LABELS))
 
 	# initilization of weight and bias
@@ -168,24 +169,26 @@ with graph.as_default():
 	logits = model(tf_train_dataset, variables)
 
 	# loss
-	loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=tf_train_label))
+	loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=logits, labels=tf_train_label))
 
 	# optimizer
 	optimizer = tf.train.AdamOptimizer(learning_rate = LR).minimize(loss)
 
 	# prediction for training set
-	train_pred = tf.nn.softmax(logits)
+	train_pred = tf.nn.softmax(logits, name='pred')
 
 with tf.Session(graph = graph) as session:
 
 	tf.global_variables_initializer().run()
 	saver = tf.train.Saver()
+
 	total_step = train_label.shape[0] // BATCH_SIZE
 	for epoch in range(EPOCH):
 		print("------------------------------- EPOCH {:02d} -------------------------------".format(epoch))
 		# shuffle the dataset for training each epoch
 		# train_dataset, train_label = randomize(train_dataset, train_label)
 		epoch_time = 0
+
 		for step in range(total_step):
 			offset = (step * BATCH_SIZE) % (train_label.shape[0] - BATCH_SIZE)
 			data = train_dataset[offset:(offset + BATCH_SIZE), :, :, :]
@@ -201,16 +204,13 @@ with tf.Session(graph = graph) as session:
 			# error rate
 			train_accuracy = accuracy(pred, label)
 			if step % 200 == 0:
-				summary = "batch {:04d}: loss is {:06.2f}, accuracy on training set {:02.2f} %".format(step, cost, train_accuracy)
+				summary = "batch {:04d}: loss is {:06.2f}, error rate on training set {:02.2f} %".format(step, cost, 100 - train_accuracy)
 				print(summary)
 
-		epoch_summary = "EPOCH {:02d}: run time {:.2f}min, accuracy on training set {:02.2f}%, error rate {:02.2f}%".format(epoch, epoch_time / 60.0, train_accuracy, 100 - train_accuracy)
+		epoch_summary = "EPOCH {:02d}: run time {:.2f}min, accuracy on training set {:02.2f}%,  error rate {:02.2f}%".format(epoch, epoch_time / 60.0, train_accuracy,100 - train_accuracy)
+		print('\n')
 		print(epoch_summary)
 
-	save_model = saver.save(session, os.path.dirname(os.path.abspath(__file__)) + "/tmp/model.ckpt")
+	save_model = saver.save(session, CURRENT_PATH + SAVE_PATH)
 	print("Model saved in path: %s" % save_model)
-
-
-
-
 
