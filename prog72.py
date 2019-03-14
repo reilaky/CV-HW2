@@ -55,16 +55,17 @@ def data_process():
 	return test_dataset, test_label
 
 test_dataset, test_label = data_process()
-#tf_test_dataset = tf.constant(test_dataset, tf.float32)
 
-# with tf.Session() as session:
-#     saver = tf.train.import_meta_graph(CURRENT_PATH + '/model.ckpt')
-#     saver.restore(sess, tf.train.latest_checkpoint(savedir))
+tf_test_dataset = tf.constant(test_dataset, tf.float32)
 
-#     graph = tf.get_default_graph()
-#     input_x = graph.get_tensor_by_name("input_x:0")
-#     result = graph.get_tensor_by_name("result:0")
+with tf.Session() as session:
+	saver = tf.train.import_meta_graph(CURRENT_PATH + '/model.ckpt')
+	saver.restore(sess, tf.train.latest_checkpoint(savedir))
 
-#     feed_dict = {input_x: x_data,}
+	graph = tf.get_default_graph()
+	input_x = graph.get_tensor_by_name("input_x:0")
+	result = graph.get_tensor_by_name("result:0")
 
-#     predictions = result.eval(feed_dict=feed_dict)
+	feed_dict = {input_x: x_data,}
+
+	predictions = result.eval(feed_dict=feed_dict)

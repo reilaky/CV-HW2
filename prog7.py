@@ -85,10 +85,6 @@ def data_process():
 			train_dataset.append(train_dataset_temp)
 			train_label += train_label_temp
 
-	with open(file_path + TEST_DATASET, 'rb') as f1:
-		test_dict = pickle.load(f1, encoding = 'bytes')
-		test_dataset, test_label = test_dict[b'data'], test_dict[b'labels']
-
 	train_dataset = np.concatenate(train_dataset, axis = 0)
 	train_dataset, train_label = reformat_data(train_dataset, train_label)
 	print("training dataset contains {} images, each of size {}".format(train_dataset[:,:,:,:].shape[0], train_dataset[:,:,:,:].shape[1:]))
@@ -182,14 +178,12 @@ with tf.Session(graph = graph) as session:
 
 	tf.global_variables_initializer().run()
 	saver = tf.train.Saver()
-
 	total_step = train_label.shape[0] // BATCH_SIZE
 	for epoch in range(EPOCH):
 		print("------------------------------- EPOCH {:02d} -------------------------------".format(epoch))
 		# shuffle the dataset for training each epoch
 		# train_dataset, train_label = randomize(train_dataset, train_label)
 		epoch_time = 0
-
 		for step in range(total_step):
 			offset = (step * BATCH_SIZE) % (train_label.shape[0] - BATCH_SIZE)
 			data = train_dataset[offset:(offset + BATCH_SIZE), :, :, :]
